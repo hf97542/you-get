@@ -24,6 +24,7 @@ sys.stdout = io.TextIOWrapper(sys.stdout.buffer,encoding='utf8')
 SITES = {
     '163'              : 'netease',
     '56'               : 'w56',
+    '365yg'            : 'toutiao',
     'acfun'            : 'acfun',
     'archive'          : 'archive',
     'baidu'            : 'baidu',
@@ -64,6 +65,7 @@ SITES = {
     'iqiyi'            : 'iqiyi',
     'ixigua'           : 'ixigua',
     'isuntv'           : 'suntv',
+    'iwara'            : 'iwara',
     'joy'              : 'joy',
     'kankanews'        : 'bilibili',
     'khanacademy'      : 'khan',
@@ -82,6 +84,7 @@ SITES = {
     'mixcloud'         : 'mixcloud',
     'mtv81'            : 'mtv81',
     'musicplayon'      : 'musicplayon',
+    'miaopai'          : 'yixia',
     'naver'            : 'naver',
     '7gogo'            : 'nanagogo',
     'nicovideo'        : 'nicovideo',
@@ -118,14 +121,12 @@ SITES = {
     'xiaojiadianvideo' : 'fc2video',
     'ximalaya'         : 'ximalaya',
     'yinyuetai'        : 'yinyuetai',
-    'miaopai'          : 'yixia',
     'yizhibo'          : 'yizhibo',
     'youku'            : 'youku',
-    'iwara'            : 'iwara',
     'youtu'            : 'youtube',
     'youtube'          : 'youtube',
     'zhanqi'           : 'zhanqi',
-    '365yg'            : 'toutiao',
+    'zhibo'            : 'zhibo',
 }
 
 dry_run = False
@@ -142,7 +143,7 @@ fake_headers = {
     'Accept-Charset': 'UTF-8,*;q=0.5',
     'Accept-Encoding': 'gzip,deflate,sdch',
     'Accept-Language': 'en-US,en;q=0.8',
-    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; WOW64; rv:51.0) Gecko/20100101 Firefox/51.0',  # noqa
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; WOW64; rv:60.0) Gecko/20100101 Firefox/60.0',  # noqa
 }
 
 if sys.stdout.isatty():
@@ -368,13 +369,16 @@ def get_decoded_html(url, faker=False):
         return data
 
 
-def get_location(url):
+def get_location(url, headers=None, get_method='HEAD'):
     logging.debug('get_location: %s' % url)
 
-    response = request.urlopen(url)
-    # urllib will follow redirections and it's too much code to tell urllib
-    # not to do that
-    return response.geturl()
+    if headers:
+        req = request.Request(url, headers=headers)
+    else:
+        req = request.Request(url)
+    req.get_method = lambda: get_method
+    res = urlopen_with_retry(req)
+    return res.geturl()
 
 
 def urlopen_with_retry(*args, **kwargs):
@@ -495,7 +499,7 @@ def urls_size(urls, faker=False, headers={}):
     return sum([url_size(url, faker=faker, headers=headers) for url in urls])
 
 
-def get_head(url, headers={}, get_method='HEAD'):
+def get_head(url, headers=None, get_method='HEAD'):
     logging.debug('get_head: %s' % url)
 
     if headers:
@@ -504,7 +508,7 @@ def get_head(url, headers={}, get_method='HEAD'):
         req = request.Request(url)
     req.get_method = lambda: get_method
     res = urlopen_with_retry(req)
-    return dict(res.headers)
+    return res.headers
 
 
 def url_info(url, faker=False, headers={}):
@@ -1593,15 +1597,11 @@ def url_to_module(url):
             url
         )
     else:
-        import http.client
-        video_host = r1(r'https?://([^/]+)/', url)  # .cn could be removed
-        if url.startswith('https://'):
-            conn = http.client.HTTPSConnection(video_host)
-        else:
-            conn = http.client.HTTPConnection(video_host)
-        conn.request('HEAD', video_url, headers=fake_headers)
-        res = conn.getresponse()
-        location = res.getheader('location')
+        try:
+            location = get_location(url) # t.co isn't happy with fake_headers
+        except:
+            location = get_location(url, headers=fake_headers)
+
         if location and location != url and not location.startswith('/'):
             return url_to_module(location)
         else:
